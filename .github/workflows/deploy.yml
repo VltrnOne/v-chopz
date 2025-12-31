@@ -37,9 +37,10 @@ jobs:
           username: ${{ secrets.SITEGROUND_USERNAME }}
           password: ${{ secrets.SITEGROUND_PASSWORD }}
           local-dir: ./frontend/dist/
-          server-dir: ./public_html/
+          server-dir: /public_html/
           protocol: ftps
           port: 21
+          dangerous-clean-slate: true
 
   # Deploy Backend to Render (optional - Render auto-deploys from GitHub)
   deploy-backend:
