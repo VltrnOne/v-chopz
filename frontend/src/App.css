@@ -50,6 +50,131 @@ body {
   filter: blur(60px);
 }
 
+/* Background Artifacts */
+.background-artifacts {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.artifact {
+  position: absolute;
+  color: rgba(102, 126, 234, 0.15);
+  font-size: 1.2rem;
+  font-weight: 300;
+  letter-spacing: 0.2em;
+  text-transform: lowercase;
+  white-space: nowrap;
+  animation: float 20s infinite ease-in-out;
+  transition: color 0.3s ease;
+  --rotation: -90deg;
+}
+
+.artifact:hover {
+  color: rgba(102, 126, 234, 0.3);
+}
+
+/* Position artifacts throughout the background */
+.artifact-1 {
+  top: 10%;
+  left: 5%;
+  animation-delay: 0s;
+  --rotation: -90deg;
+}
+
+.artifact-2 {
+  top: 20%;
+  right: 10%;
+  animation-delay: -2s;
+  --rotation: 90deg;
+}
+
+.artifact-3 {
+  top: 40%;
+  left: 8%;
+  animation-delay: -4s;
+  --rotation: -90deg;
+}
+
+.artifact-4 {
+  top: 60%;
+  right: 15%;
+  animation-delay: -6s;
+  --rotation: 90deg;
+}
+
+.artifact-5 {
+  top: 80%;
+  left: 12%;
+  animation-delay: -8s;
+  --rotation: -90deg;
+}
+
+.artifact-6 {
+  top: 15%;
+  left: 50%;
+  animation-delay: -10s;
+  --rotation: -45deg;
+}
+
+.artifact-7 {
+  top: 35%;
+  right: 5%;
+  animation-delay: -12s;
+  --rotation: 45deg;
+}
+
+.artifact-8 {
+  top: 55%;
+  left: 3%;
+  animation-delay: -14s;
+  --rotation: -30deg;
+}
+
+.artifact-9 {
+  top: 75%;
+  right: 8%;
+  animation-delay: -16s;
+  --rotation: 30deg;
+}
+
+.artifact-10 {
+  top: 25%;
+  left: 25%;
+  animation-delay: -18s;
+  --rotation: -60deg;
+}
+
+.artifact-11 {
+  top: 65%;
+  right: 25%;
+  animation-delay: -20s;
+  --rotation: 60deg;
+}
+
+.artifact-12 {
+  top: 50%;
+  left: 70%;
+  animation-delay: -22s;
+  --rotation: -15deg;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) rotate(var(--rotation, -90deg));
+    opacity: 0.15;
+  }
+  50% {
+    transform: translateY(-20px) rotate(var(--rotation, -90deg));
+    opacity: 0.25;
+  }
+}
+
 /* Particles */
 .particle {
   position: fixed;

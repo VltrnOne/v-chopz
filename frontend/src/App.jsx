@@ -268,6 +268,22 @@ function App() {
       {/* Animated background */}
       <div className="background">
         <div className="gradient-orb" style={{ left: `${mousePos.x}px`, top: `${mousePos.y}px` }}></div>
+        
+        {/* Background artifacts with instructions */}
+        <div className="background-artifacts">
+          <div className="artifact artifact-1">click & hold</div>
+          <div className="artifact artifact-2">upload video</div>
+          <div className="artifact artifact-3">choose segments</div>
+          <div className="artifact artifact-4">chop it</div>
+          <div className="artifact artifact-5">download</div>
+          <div className="artifact artifact-6">up to 24hrs</div>
+          <div className="artifact artifact-7">free</div>
+          <div className="artifact artifact-8">watermarked</div>
+          <div className="artifact artifact-9">ready</div>
+          <div className="artifact artifact-10">hold</div>
+          <div className="artifact artifact-11">release</div>
+          <div className="artifact artifact-12">split</div>
+        </div>
       </div>
 
       {/* Particles */}
