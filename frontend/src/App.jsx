@@ -524,7 +524,7 @@ function App() {
                 </div>
 
                 <div className="split-controls-creative">
-                  <p className="split-label">how many pieces?</p>
+                  <p className="split-label">how many chopz?</p>
                   <div className="number-selector">
                     <button
                       className="num-btn"
@@ -588,7 +588,7 @@ function App() {
               <CheckCircle2 size={64} strokeWidth={1.5} />
             </div>
             <h2 className="completion-title">all done</h2>
-              <p className="completion-subtitle">{numSplits} pieces ready</p>
+              <p className="completion-subtitle">{numSplits} chopz ready</p>
             </div>
 
             <div className="download-options">

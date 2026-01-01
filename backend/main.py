@@ -143,11 +143,13 @@ def split_video_with_watermark(
             start_time = i * segment_duration
             output_file = os.path.join(output_dir, f"segment_{i+1:02d}.mp4")
             
-            # Update progress (thread-safe)
+            # Update progress BEFORE processing (thread-safe)
             with job_statuses_lock:
                 if job_id in job_statuses:
-                    job_statuses[job_id]["progress"] = i + 1
-                    job_statuses[job_id]["message"] = f"Processing segment {i+1} of {num_splits}..."
+                    job_statuses[job_id]["progress"] = i
+                    job_statuses[job_id]["message"] = f"Processing chop {i+1} of {num_splits}..."
+            
+            print(f"Processing segment {i+1}/{num_splits} for job {job_id}")
             
             # Build ffmpeg command
             input_stream = ffmpeg.input(input_path, ss=start_time, t=segment_duration)
@@ -175,9 +177,21 @@ def split_video_with_watermark(
                 **{'movflags': 'faststart'}
             )
             
-            # Run ffmpeg
-            ffmpeg.run(output, overwrite_output=True, quiet=True)
-            output_files.append(output_file)
+            # Run ffmpeg with error handling
+            try:
+                ffmpeg.run(output, overwrite_output=True, quiet=True, capture_stdout=True, capture_stderr=True)
+                output_files.append(output_file)
+                print(f"Completed segment {i+1}/{num_splits} for job {job_id}")
+            except ffmpeg.Error as e:
+                error_msg = f"FFmpeg error on segment {i+1}: {e.stderr.decode() if e.stderr else str(e)}"
+                print(f"Error: {error_msg}")
+                raise Exception(error_msg)
+            
+            # Update progress AFTER processing completes (thread-safe)
+            with job_statuses_lock:
+                if job_id in job_statuses:
+                    job_statuses[job_id]["progress"] = i + 1
+                    job_statuses[job_id]["message"] = f"Completed chop {i+1} of {num_splits}..."
         
         # Mark as completed (thread-safe)
         with job_statuses_lock:
