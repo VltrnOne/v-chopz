@@ -289,7 +289,7 @@ function App() {
         <div 
           className="gradient-orb" 
           style={{ 
-            transform: `translate(${mousePos.x}px, ${mousePos.y}px)`
+            transform: `translate(calc(${mousePos.x}px - 50%), calc(${mousePos.y}px - 50%))`
           }}
         ></div>
         
