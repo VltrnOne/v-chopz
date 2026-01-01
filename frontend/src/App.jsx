@@ -23,15 +23,18 @@ function App() {
   const pollIntervalRef = useRef(null)
   const holdIntervalRef = useRef(null)
   const fileInputRef = useRef(null)
+  const orbRef = useRef(null)
 
-  // Track mouse movement for interactive effects - optimized with requestAnimationFrame
+  // Track mouse movement for interactive effects - direct DOM manipulation for smoothness
   useEffect(() => {
     let rafId = null
     let targetX = 0
     let targetY = 0
     
-    const updateMousePos = () => {
-      setMousePos({ x: targetX, y: targetY })
+    const updateOrbPosition = () => {
+      if (orbRef.current) {
+        orbRef.current.style.transform = `translate(calc(${targetX}px - 50%), calc(${targetY}px - 50%))`
+      }
       rafId = null
     }
     
@@ -39,9 +42,12 @@ function App() {
       targetX = e.clientX
       targetY = e.clientY
       
-      // Schedule update if not already scheduled
+      // Update state for particles (less frequent)
+      setMousePos({ x: e.clientX, y: e.clientY })
+      
+      // Schedule DOM update if not already scheduled
       if (!rafId) {
-        rafId = requestAnimationFrame(updateMousePos)
+        rafId = requestAnimationFrame(updateOrbPosition)
       }
     }
     
@@ -287,10 +293,8 @@ function App() {
       {/* Animated background */}
       <div className="background">
         <div 
-          className="gradient-orb" 
-          style={{ 
-            transform: `translate(calc(${mousePos.x}px - 50%), calc(${mousePos.y}px - 50%))`
-          }}
+          ref={orbRef}
+          className="gradient-orb"
         ></div>
         
         {/* Background artifacts with instructions */}
