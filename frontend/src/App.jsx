@@ -24,13 +24,38 @@ function App() {
   const holdIntervalRef = useRef(null)
   const fileInputRef = useRef(null)
 
-  // Track mouse movement for interactive effects
+  // Track mouse movement for interactive effects - optimized with requestAnimationFrame
   useEffect(() => {
-    const handleMouseMove = (e) => {
-      setMousePos({ x: e.clientX, y: e.clientY })
+    let rafId = null
+    let lastX = 0
+    let lastY = 0
+    
+    const updateMousePos = (x, y) => {
+      if (rafId) return // Already scheduled
+      
+      rafId = requestAnimationFrame(() => {
+        setMousePos({ x, y })
+        rafId = null
+      })
     }
-    window.addEventListener('mousemove', handleMouseMove)
-    return () => window.removeEventListener('mousemove', handleMouseMove)
+    
+    const handleMouseMove = (e) => {
+      // Throttle updates - only update if moved significantly
+      const dx = Math.abs(e.clientX - lastX)
+      const dy = Math.abs(e.clientY - lastY)
+      
+      if (dx > 2 || dy > 2) {
+        lastX = e.clientX
+        lastY = e.clientY
+        updateMousePos(e.clientX, e.clientY)
+      }
+    }
+    
+    window.addEventListener('mousemove', handleMouseMove, { passive: true })
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      if (rafId) cancelAnimationFrame(rafId)
+    }
   }, [])
 
   // Create particles on interaction

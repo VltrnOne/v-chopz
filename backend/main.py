@@ -291,21 +291,37 @@ async def split_video(
     output_dir.mkdir(exist_ok=True)
     
     # Check if already processing
-    if job_id in job_statuses and job_statuses[job_id]["status"] == JobStatus.PROCESSING:
+    if job_id in job_statuses and job_statuses[job_id].get("status") == JobStatus.PROCESSING:
         raise HTTPException(status_code=400, detail="Video is already being processed")
     
-    # Start background task for splitting
-    def process_video():
-        split_video_with_watermark(
-            str(input_video),
-            str(output_dir),
-            num_splits,
-            job_id
-        )
+    # Initialize processing status
+    job_statuses[job_id] = {
+        "status": JobStatus.PROCESSING,
+        "progress": 0,
+        "total_segments": num_splits,
+        "message": "Starting video processing..."
+    }
     
-    # Run in background
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, process_video)
+    # Start background task for splitting using thread pool
+    async def process_video_async():
+        loop = asyncio.get_event_loop()
+        try:
+            await loop.run_in_executor(
+                None,
+                split_video_with_watermark,
+                str(input_video),
+                str(output_dir),
+                num_splits,
+                job_id
+            )
+        except Exception as e:
+            job_statuses[job_id] = {
+                "status": JobStatus.FAILED,
+                "message": f"Error: {str(e)}"
+            }
+    
+    # Use asyncio.create_task to run in background
+    asyncio.create_task(process_video_async())
     
     return {
         "job_id": job_id,
