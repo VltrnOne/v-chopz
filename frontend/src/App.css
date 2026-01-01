@@ -68,8 +68,8 @@ body {
   position: absolute;
   height: 4px;
   pointer-events: none;
-  opacity: 0.2;
-  will-change: transform, left, top;
+  opacity: 0;
+  will-change: transform, left, top, opacity, filter;
 }
 
 .timeline-bar {

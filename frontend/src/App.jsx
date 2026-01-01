@@ -6,7 +6,7 @@ import './App.css'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 // Timeline Segment Component
-const TimelineSegment = ({ index }) => {
+const TimelineSegment = ({ index, mousePos }) => {
   const segmentRef = useRef(null)
   const [position, setPosition] = useState({
     x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1920),
@@ -16,6 +16,40 @@ const TimelineSegment = ({ index }) => {
     speed: 0.3 + Math.random() * 0.5,
     direction: Math.random() * 360
   })
+  const [illumination, setIllumination] = useState(0)
+
+  // Calculate illumination based on distance from cursor
+  useEffect(() => {
+    if (!segmentRef.current || !mousePos) return
+
+    const updateIllumination = () => {
+      const rect = segmentRef.current.getBoundingClientRect()
+      const segmentCenterX = rect.left + rect.width / 2
+      const segmentCenterY = rect.top + rect.height / 2
+      
+      const dx = mousePos.x - segmentCenterX
+      const dy = mousePos.y - segmentCenterY
+      const distance = Math.sqrt(dx * dx + dy * dy)
+      
+      // Illumination radius (300px)
+      const maxDistance = 300
+      const minDistance = 0
+      
+      // Calculate opacity: 1 at center, 0 at maxDistance
+      const opacity = Math.max(0, 1 - (distance / maxDistance))
+      
+      // Add some glow effect - stronger when closer
+      const glowIntensity = Math.max(0, 1 - (distance / (maxDistance * 0.6)))
+      
+      setIllumination({
+        opacity: opacity * 0.8, // Max opacity 0.8
+        glow: glowIntensity
+      })
+    }
+
+    const interval = setInterval(updateIllumination, 16) // ~60fps
+    return () => clearInterval(interval)
+  }, [mousePos])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -53,7 +87,10 @@ const TimelineSegment = ({ index }) => {
         top: `${position.y}px`,
         width: `${position.width}px`,
         transform: `rotate(${position.angle}deg)`,
-        animationDelay: `${index * 0.2}s`
+        animationDelay: `${index * 0.2}s`,
+        opacity: illumination.opacity || 0,
+        filter: `brightness(${1 + illumination.glow * 0.5}) drop-shadow(0 0 ${illumination.glow * 10}px rgba(102, 126, 234, ${illumination.glow * 0.8}))`,
+        transition: 'opacity 0.3s ease, filter 0.3s ease'
       }}
     >
       <div className="timeline-bar"></div>
