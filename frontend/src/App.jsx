@@ -228,9 +228,9 @@ function App() {
   const handleFileChange = async (e) => {
     const selectedFile = e.target.files[0]
     if (selectedFile) {
-      const maxSize = 2 * 1024 * 1024 * 1024 // 2GB for browser processing
+      const maxSize = 10 * 1024 * 1024 * 1024 // 10GB for browser processing
       if (selectedFile.size > maxSize) {
-        setError('File size must be less than 2GB for browser processing')
+        setError('File size must be less than 10GB for browser processing')
         return
       }
       setFile(selectedFile)
