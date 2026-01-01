@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
-import axios from 'axios'
-import { Video, CheckCircle2 } from 'lucide-react'
+import { FFmpeg } from '@ffmpeg/ffmpeg'
+import { fetchFile, toBlobURL } from '@ffmpeg/util'
+import { Video, CheckCircle2, Download } from 'lucide-react'
 import './App.css'
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 // Timeline Segment Component
 const TimelineSegment = ({ index, mousePos }) => {
@@ -18,7 +17,6 @@ const TimelineSegment = ({ index, mousePos }) => {
   })
   const [illumination, setIllumination] = useState(0)
 
-  // Calculate illumination based on distance from cursor
   useEffect(() => {
     if (!segmentRef.current || !mousePos) return
 
@@ -26,54 +24,44 @@ const TimelineSegment = ({ index, mousePos }) => {
       const rect = segmentRef.current.getBoundingClientRect()
       const segmentCenterX = rect.left + rect.width / 2
       const segmentCenterY = rect.top + rect.height / 2
-      
+
       const dx = mousePos.x - segmentCenterX
       const dy = mousePos.y - segmentCenterY
       const distance = Math.sqrt(dx * dx + dy * dy)
-      
-      // Illumination radius (300px)
+
       const maxDistance = 300
-      const minDistance = 0
-      
-      // Calculate opacity: 1 at center, 0 at maxDistance
       const opacity = Math.max(0, 1 - (distance / maxDistance))
-      
-      // Add some glow effect - stronger when closer
       const glowIntensity = Math.max(0, 1 - (distance / (maxDistance * 0.6)))
-      
+
       setIllumination({
-        opacity: opacity * 0.8, // Max opacity 0.8
+        opacity: opacity * 0.8,
         glow: glowIntensity
       })
     }
 
-    const interval = setInterval(updateIllumination, 16) // ~60fps
+    const interval = setInterval(updateIllumination, 16)
     return () => clearInterval(interval)
   }, [mousePos])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    
+
     const moveSegment = () => {
       setPosition(prev => {
         const newX = prev.x + Math.cos(prev.direction * Math.PI / 180) * prev.speed
         const newY = prev.y + Math.sin(prev.direction * Math.PI / 180) * prev.speed
-        
+
         let finalX = newX
         let finalY = newY
         if (newX < -prev.width) finalX = window.innerWidth
         if (newX > window.innerWidth) finalX = -prev.width
         if (newY < -20) finalY = window.innerHeight
         if (newY > window.innerHeight) finalY = -20
-        
-        return {
-          ...prev,
-          x: finalX,
-          y: finalY
-        }
+
+        return { ...prev, x: finalX, y: finalY }
       })
     }
-    
+
     const interval = setInterval(moveSegment, 16)
     return () => clearInterval(interval)
   }, [])
@@ -106,50 +94,86 @@ const TimelineSegment = ({ index, mousePos }) => {
 function App() {
   const [file, setFile] = useState(null)
   const [numSplits, setNumSplits] = useState(2)
-  const [jobId, setJobId] = useState(null)
-  const [uploading, setUploading] = useState(false)
-  const [splitting, setSplitting] = useState(false)
+  const [processing, setProcessing] = useState(false)
   const [completed, setCompleted] = useState(false)
   const [error, setError] = useState(null)
   const [videoDuration, setVideoDuration] = useState(null)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [splitProgress, setSplitProgress] = useState(0)
-  const [splitStatus, setSplitStatus] = useState(null)
+  const [progress, setProgress] = useState(0)
+  const [progressMessage, setProgressMessage] = useState('')
   const [isHolding, setIsHolding] = useState(false)
   const [holdProgress, setHoldProgress] = useState(0)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [particles, setParticles] = useState([])
-  const pollIntervalRef = useRef(null)
+  const [segments, setSegments] = useState([])
+  const [ffmpegLoaded, setFfmpegLoaded] = useState(false)
+  const [ffmpegLoading, setFfmpegLoading] = useState(false)
+
   const holdIntervalRef = useRef(null)
   const fileInputRef = useRef(null)
   const orbRef = useRef(null)
+  const ffmpegRef = useRef(null)
 
-  // Track mouse movement for interactive effects - direct DOM manipulation for smoothness
+  // Initialize FFmpeg
+  useEffect(() => {
+    const loadFFmpeg = async () => {
+      if (ffmpegRef.current || ffmpegLoading) return
+
+      setFfmpegLoading(true)
+      try {
+        const ffmpeg = new FFmpeg()
+        ffmpegRef.current = ffmpeg
+
+        ffmpeg.on('log', ({ message }) => {
+          console.log('[FFmpeg]', message)
+        })
+
+        ffmpeg.on('progress', ({ progress: p }) => {
+          // Progress is per-segment, so we'll handle it in the split function
+        })
+
+        // Load FFmpeg WASM
+        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm'
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        })
+
+        setFfmpegLoaded(true)
+        console.log('FFmpeg loaded successfully')
+      } catch (err) {
+        console.error('Failed to load FFmpeg:', err)
+        setError('Failed to load video processor. Please refresh the page.')
+      } finally {
+        setFfmpegLoading(false)
+      }
+    }
+
+    loadFFmpeg()
+  }, [])
+
+  // Track mouse movement
   useEffect(() => {
     let rafId = null
     let targetX = 0
     let targetY = 0
-    
+
     const updateOrbPosition = () => {
       if (orbRef.current) {
         orbRef.current.style.transform = `translate(calc(${targetX}px - 50%), calc(${targetY}px - 50%))`
       }
       rafId = null
     }
-    
+
     const handleMouseMove = (e) => {
       targetX = e.clientX
       targetY = e.clientY
-      
-      // Update state for particles (less frequent)
       setMousePos({ x: e.clientX, y: e.clientY })
-      
-      // Schedule DOM update if not already scheduled
+
       if (!rafId) {
         rafId = requestAnimationFrame(updateOrbPosition)
       }
     }
-    
+
     window.addEventListener('mousemove', handleMouseMove, { passive: true })
     return () => {
       window.removeEventListener('mousemove', handleMouseMove)
@@ -157,18 +181,16 @@ function App() {
     }
   }, [])
 
-  // Create particles on interaction
+  // Create particles
   const createParticle = (x, y) => {
     const particle = {
       id: Date.now() + Math.random(),
-      x,
-      y,
+      x, y,
       vx: (Math.random() - 0.5) * 4,
       vy: (Math.random() - 0.5) * 4,
       life: 1
     }
     setParticles(prev => [...prev, particle])
-    
     setTimeout(() => {
       setParticles(prev => prev.filter(p => p.id !== particle.id))
     }, 1000)
@@ -177,7 +199,7 @@ function App() {
   // Update particles
   useEffect(() => {
     const interval = setInterval(() => {
-      setParticles(prev => 
+      setParticles(prev =>
         prev.map(p => ({
           ...p,
           x: p.x + p.vx,
@@ -189,26 +211,43 @@ function App() {
     return () => clearInterval(interval)
   }, [])
 
-  const handleFileChange = (e) => {
+  // Get video duration
+  const getVideoDuration = (file) => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video')
+      video.preload = 'metadata'
+      video.onloadedmetadata = () => {
+        resolve(video.duration)
+        URL.revokeObjectURL(video.src)
+      }
+      video.onerror = () => resolve(null)
+      video.src = URL.createObjectURL(file)
+    })
+  }
+
+  const handleFileChange = async (e) => {
     const selectedFile = e.target.files[0]
     if (selectedFile) {
-      const maxSize = 50 * 1024 * 1024 * 1024 // 50GB
+      const maxSize = 2 * 1024 * 1024 * 1024 // 2GB for browser processing
       if (selectedFile.size > maxSize) {
-        setError(`File size must be less than ${(maxSize / (1024**3)).toFixed(1)}GB`)
+        setError('File size must be less than 2GB for browser processing')
         return
       }
       setFile(selectedFile)
       setError(null)
-      setJobId(null)
       setCompleted(false)
-      setUploadProgress(0)
-      setSplitProgress(0)
+      setProgress(0)
+      setSegments([])
+
+      // Get video duration
+      const duration = await getVideoDuration(selectedFile)
+      setVideoDuration(duration)
       createParticle(mousePos.x, mousePos.y)
     }
   }
 
   const handleMouseDown = () => {
-    if (!file) {
+    if (!file && !processing) {
       setIsHolding(true)
       setHoldProgress(0)
       holdIntervalRef.current = setInterval(() => {
@@ -235,49 +274,9 @@ function App() {
     }
   }
 
-  const handleUpload = async () => {
-    if (!file) {
-      setError('Please select a video file')
-      return
-    }
-
-    setUploading(true)
-    setError(null)
-    setUploadProgress(0)
-
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const response = await axios.post(`${API_URL}/upload`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const percentCompleted = Math.round(
-              (progressEvent.loaded * 100) / progressEvent.total
-            )
-            setUploadProgress(percentCompleted)
-          }
-        },
-      })
-
-      setJobId(response.data.job_id)
-      setVideoDuration(response.data.duration)
-      setUploading(false)
-      setUploadProgress(100)
-      createParticle(mousePos.x, mousePos.y)
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Upload failed')
-      setUploading(false)
-      setUploadProgress(0)
-    }
-  }
-
   const handleSplit = async () => {
-    if (!jobId) {
-      setError('Please upload a video first')
+    if (!file || !ffmpegLoaded) {
+      setError(ffmpegLoaded ? 'Please select a video file' : 'Video processor is still loading...')
       return
     }
 
@@ -286,94 +285,128 @@ function App() {
       return
     }
 
-    setSplitting(true)
+    setProcessing(true)
     setError(null)
-    setSplitProgress(0)
-    setSplitStatus('Starting...')
+    setProgress(0)
+    setProgressMessage('Loading video...')
+    setSegments([])
 
     try {
-      await axios.post(`${API_URL}/split/${jobId}`, null, {
-        params: { num_splits: numSplits },
-      })
-      startPolling()
+      const ffmpeg = ffmpegRef.current
+      const inputFileName = 'input.mp4'
+
+      // Write input file to FFmpeg virtual filesystem
+      setProgressMessage('Preparing video...')
+      const fileData = await fetchFile(file)
+      await ffmpeg.writeFile(inputFileName, fileData)
+
+      // Get duration for splitting
+      const duration = videoDuration || 60
+      const segmentDuration = duration / numSplits
+      const outputSegments = []
+
+      for (let i = 0; i < numSplits; i++) {
+        const startTime = i * segmentDuration
+        const outputFileName = `segment_${String(i + 1).padStart(2, '0')}.mp4`
+
+        setProgressMessage(`Processing chop ${i + 1} of ${numSplits}...`)
+        setProgress(Math.round((i / numSplits) * 100))
+
+        // FFmpeg command to split segment with watermark text
+        await ffmpeg.exec([
+          '-ss', String(startTime),
+          '-i', inputFileName,
+          '-t', String(segmentDuration),
+          '-vf', `drawtext=text='V-Chopz by VLTRN':fontsize=24:fontcolor=white@0.7:x=w-tw-20:y=h-th-20`,
+          '-c:v', 'libx264',
+          '-preset', 'ultrafast',
+          '-c:a', 'aac',
+          '-movflags', '+faststart',
+          '-y',
+          outputFileName
+        ])
+
+        // Read the output file
+        const data = await ffmpeg.readFile(outputFileName)
+        const blob = new Blob([data.buffer], { type: 'video/mp4' })
+        const url = URL.createObjectURL(blob)
+
+        outputSegments.push({
+          name: outputFileName,
+          url: url,
+          number: i + 1
+        })
+
+        setProgress(Math.round(((i + 1) / numSplits) * 100))
+        createParticle(mousePos.x, mousePos.y)
+      }
+
+      // Cleanup input file
+      await ffmpeg.deleteFile(inputFileName)
+
+      setSegments(outputSegments)
+      setCompleted(true)
+      setProcessing(false)
+      setProgressMessage('Complete!')
       createParticle(mousePos.x, mousePos.y)
+
     } catch (err) {
-      setError(err.response?.data?.detail || 'Splitting failed')
-      setSplitting(false)
-      stopPolling()
+      console.error('Processing error:', err)
+      setError('Video processing failed: ' + (err.message || 'Unknown error'))
+      setProcessing(false)
     }
   }
 
-  const startPolling = () => {
-    pollIntervalRef.current = setInterval(async () => {
-      try {
-        const response = await axios.get(`${API_URL}/status/${jobId}`)
-        const status = response.data
-
-        setSplitStatus(status.message)
-        setSplitProgress(status.progress_percent || 0)
-
-        if (status.status === 'completed') {
-          setCompleted(true)
-          setSplitting(false)
-          stopPolling()
-          createParticle(mousePos.x, mousePos.y)
-        } else if (status.status === 'failed') {
-          setError(status.message || 'Video splitting failed')
-          setSplitting(false)
-          stopPolling()
-        }
-      } catch (err) {
-        console.error('Error polling status:', err)
-      }
-    }, 2000)
-  }
-
-  const stopPolling = () => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
-      pollIntervalRef.current = null
-    }
-  }
-
-  useEffect(() => {
-    return () => {
-      stopPolling()
-      if (holdIntervalRef.current) {
-        clearInterval(holdIntervalRef.current)
-      }
-    }
-  }, [])
-
-  const handleDownloadAll = () => {
-    if (!jobId) return
-    window.open(`${API_URL}/download-all/${jobId}`, '_blank')
+  const handleDownloadSegment = (segment) => {
+    const link = document.createElement('a')
+    link.href = segment.url
+    link.download = segment.name
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
     createParticle(mousePos.x, mousePos.y)
   }
 
-  const handleDownloadSegment = (segmentNum) => {
-    if (!jobId) return
-    window.open(`${API_URL}/download/${jobId}?segment=${segmentNum}`, '_blank')
-    createParticle(mousePos.x, mousePos.y)
+  const handleDownloadAll = async () => {
+    // Download each segment
+    for (const segment of segments) {
+      handleDownloadSegment(segment)
+      await new Promise(resolve => setTimeout(resolve, 500)) // Stagger downloads
+    }
   }
 
   const handleReset = () => {
+    // Revoke all blob URLs
+    segments.forEach(s => URL.revokeObjectURL(s.url))
+
     setFile(null)
-    setJobId(null)
     setCompleted(false)
     setError(null)
     setVideoDuration(null)
     setNumSplits(2)
+    setProgress(0)
+    setProgressMessage('')
+    setSegments([])
     if (fileInputRef.current) fileInputRef.current.value = ''
     createParticle(mousePos.x, mousePos.y)
   }
+
+  useEffect(() => {
+    return () => {
+      if (holdIntervalRef.current) {
+        clearInterval(holdIntervalRef.current)
+      }
+      // Cleanup blob URLs on unmount
+      segments.forEach(s => URL.revokeObjectURL(s.url))
+    }
+  }, [segments])
 
   const formatDuration = (seconds) => {
     if (!seconds) return ''
     const hours = Math.floor(seconds / 3600)
     const mins = Math.floor((seconds % 3600) / 60)
     const secs = Math.floor(seconds % 60)
-    
+
     if (hours > 0) {
       return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
     }
@@ -391,12 +424,7 @@ function App() {
     <div className="app">
       {/* Animated background */}
       <div className="background">
-        <div 
-          ref={orbRef}
-          className="gradient-orb"
-        ></div>
-        
-        {/* Animated video timeline segments */}
+        <div ref={orbRef} className="gradient-orb"></div>
         <div className="timeline-container">
           {Array.from({ length: 15 }, (_, i) => (
             <TimelineSegment key={i} index={i} mousePos={mousePos} />
@@ -425,10 +453,13 @@ function App() {
             <div className="header">
               <h1 className="title-main">V-Chopz</h1>
               <p className="subtitle-main">chop your videos</p>
+              {ffmpegLoading && (
+                <p className="loading-indicator">loading video processor...</p>
+              )}
             </div>
 
             {/* Upload Section */}
-            {!jobId ? (
+            {!file ? (
               <div className="upload-section">
                 <input
                   ref={fileInputRef}
@@ -438,8 +469,8 @@ function App() {
                   onChange={handleFileChange}
                   className="file-input-hidden"
                 />
-                
-                <div 
+
+                <div
                   className="upload-zone"
                   onMouseDown={handleMouseDown}
                   onMouseUp={handleMouseUp}
@@ -447,63 +478,32 @@ function App() {
                   onTouchStart={handleMouseDown}
                   onTouchEnd={handleMouseUp}
                 >
-                  {!file ? (
-                    <>
-                      <div className="upload-instruction">
-                        {isHolding ? (
-                          <>
-                            <div className="hold-progress-ring">
-                              <svg className="progress-svg" viewBox="0 0 100 100">
-                                <circle
-                                  className="progress-circle"
-                                  cx="50"
-                                  cy="50"
-                                  r="45"
-                                  style={{
-                                    strokeDasharray: `${2 * Math.PI * 45}`,
-                                    strokeDashoffset: `${2 * Math.PI * 45 * (1 - holdProgress / 100)}`
-                                  }}
-                                />
-                              </svg>
-                            </div>
-                            <p className="hold-text">hold</p>
-                          </>
-                        ) : (
-                          <>
-                            <p className="click-text">click & hold</p>
-                            <p className="click-subtext">to select video</p>
-                          </>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="file-selected">
-                      <div className="file-icon">
-                        <Video size={48} strokeWidth={1.5} />
-                      </div>
-                      <p className="file-name">{file.name}</p>
-                      <p className="file-size">{formatFileSize(file.size)}</p>
-                      {uploading && (
-                        <div className="upload-progress">
-                          <div className="progress-bar-mini">
-                            <div 
-                              className="progress-fill-mini" 
-                              style={{ width: `${uploadProgress}%` }}
+                  <div className="upload-instruction">
+                    {isHolding ? (
+                      <>
+                        <div className="hold-progress-ring">
+                          <svg className="progress-svg" viewBox="0 0 100 100">
+                            <circle
+                              className="progress-circle"
+                              cx="50"
+                              cy="50"
+                              r="45"
+                              style={{
+                                strokeDasharray: `${2 * Math.PI * 45}`,
+                                strokeDashoffset: `${2 * Math.PI * 45 * (1 - holdProgress / 100)}`
+                              }}
                             />
-                          </div>
-                          <p className="progress-percent">{uploadProgress}%</p>
+                          </svg>
                         </div>
-                      )}
-                      {!uploading && (
-                        <button
-                          onClick={handleUpload}
-                          className="btn-upload"
-                        >
-                          upload
-                        </button>
-                      )}
-                    </div>
-                  )}
+                        <p className="hold-text">hold</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="click-text">click & hold</p>
+                        <p className="click-subtext">to select video</p>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {error && (
@@ -516,8 +516,11 @@ function App() {
               /* Split Configuration */
               <div className="split-section">
                 <div className="success-indicator">
-                  <div className="check-mark">✓</div>
-                  <p className="success-text">ready</p>
+                  <div className="file-icon">
+                    <Video size={48} strokeWidth={1.5} />
+                  </div>
+                  <p className="file-name">{file.name}</p>
+                  <p className="file-size">{formatFileSize(file.size)}</p>
                   {videoDuration && (
                     <p className="duration-text">{formatDuration(videoDuration)}</p>
                   )}
@@ -529,7 +532,7 @@ function App() {
                     <button
                       className="num-btn"
                       onClick={() => setNumSplits(Math.max(1, numSplits - 1))}
-                      disabled={numSplits <= 1}
+                      disabled={numSplits <= 1 || processing}
                     >
                       −
                     </button>
@@ -537,7 +540,7 @@ function App() {
                     <button
                       className="num-btn"
                       onClick={() => setNumSplits(Math.min(12, numSplits + 1))}
-                      disabled={numSplits >= 12}
+                      disabled={numSplits >= 12 || processing}
                     >
                       +
                     </button>
@@ -549,26 +552,33 @@ function App() {
                   )}
                 </div>
 
-                {splitting ? (
+                {processing ? (
                   <div className="processing-state">
                     <div className="processing-ring">
                       <div className="spinner"></div>
                     </div>
-                    <p className="processing-text">{splitStatus || 'processing...'}</p>
+                    <p className="processing-text">{progressMessage || 'processing...'}</p>
                     <div className="processing-progress">
-                      <div 
-                        className="progress-fill-creative" 
-                        style={{ width: `${splitProgress}%` }}
+                      <div
+                        className="progress-fill-creative"
+                        style={{ width: `${progress}%` }}
                       />
                     </div>
-                    <p className="progress-percent-creative">{splitProgress}%</p>
+                    <p className="progress-percent-creative">{progress}%</p>
                   </div>
                 ) : (
                   <button
                     onClick={handleSplit}
                     className="btn-split"
+                    disabled={!ffmpegLoaded}
                   >
-                    chop it
+                    {ffmpegLoaded ? 'chop it' : 'loading...'}
+                  </button>
+                )}
+
+                {!processing && (
+                  <button onClick={handleReset} className="btn-reset-small">
+                    choose different video
                   </button>
                 )}
 
@@ -583,11 +593,11 @@ function App() {
         ) : (
           /* Completion Screen */
           <div className="completion-section">
-          <div className="completion-header">
-            <div className="completion-icon">
-              <CheckCircle2 size={64} strokeWidth={1.5} />
-            </div>
-            <h2 className="completion-title">all done</h2>
+            <div className="completion-header">
+              <div className="completion-icon">
+                <CheckCircle2 size={64} strokeWidth={1.5} />
+              </div>
+              <h2 className="completion-title">all done</h2>
               <p className="completion-subtitle">{numSplits} chopz ready</p>
             </div>
 
@@ -600,20 +610,20 @@ function App() {
               </button>
 
               <div className="segment-list">
-                {Array.from({ length: numSplits }, (_, i) => (
+                {segments.map((segment) => (
                   <button
-                    key={i + 1}
-                    onClick={() => handleDownloadSegment(i + 1)}
+                    key={segment.number}
+                    onClick={() => handleDownloadSegment(segment)}
                     className="btn-segment-creative"
                   >
-                    {i + 1}
+                    {segment.number}
                   </button>
                 ))}
               </div>
             </div>
 
-            <button 
-              onClick={handleReset} 
+            <button
+              onClick={handleReset}
               className="btn-restart"
             >
               restart

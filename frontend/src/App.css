@@ -687,3 +687,50 @@ body {
     min-height: 250px;
   }
 }
+
+/* Loading indicator */
+.loading-indicator {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  font-family: 'Space Grotesk', monospace;
+}
+
+/* Reset small button */
+.btn-reset-small {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Space Grotesk', monospace;
+  font-size: 0.875rem;
+  transition: all 0.3s ease;
+}
+
+.btn-reset-small:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* File info in split section */
+.split-section .file-icon {
+  color: rgba(102, 126, 234, 0.8);
+  margin-bottom: 0.5rem;
+}
+
+.split-section .file-name {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+  word-break: break-all;
+}
+
+.split-section .file-size {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
