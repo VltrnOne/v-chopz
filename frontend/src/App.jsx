@@ -27,27 +27,21 @@ function App() {
   // Track mouse movement for interactive effects - optimized with requestAnimationFrame
   useEffect(() => {
     let rafId = null
-    let lastX = 0
-    let lastY = 0
+    let targetX = 0
+    let targetY = 0
     
-    const updateMousePos = (x, y) => {
-      if (rafId) return // Already scheduled
-      
-      rafId = requestAnimationFrame(() => {
-        setMousePos({ x, y })
-        rafId = null
-      })
+    const updateMousePos = () => {
+      setMousePos({ x: targetX, y: targetY })
+      rafId = null
     }
     
     const handleMouseMove = (e) => {
-      // Throttle updates - only update if moved significantly
-      const dx = Math.abs(e.clientX - lastX)
-      const dy = Math.abs(e.clientY - lastY)
+      targetX = e.clientX
+      targetY = e.clientY
       
-      if (dx > 2 || dy > 2) {
-        lastX = e.clientX
-        lastY = e.clientY
-        updateMousePos(e.clientX, e.clientY)
+      // Schedule update if not already scheduled
+      if (!rafId) {
+        rafId = requestAnimationFrame(updateMousePos)
       }
     }
     
@@ -292,7 +286,12 @@ function App() {
     <div className="app">
       {/* Animated background */}
       <div className="background">
-        <div className="gradient-orb" style={{ left: `${mousePos.x}px`, top: `${mousePos.y}px` }}></div>
+        <div 
+          className="gradient-orb" 
+          style={{ 
+            transform: `translate(${mousePos.x}px, ${mousePos.y}px)`
+          }}
+        ></div>
         
         {/* Background artifacts with instructions */}
         <div className="background-artifacts">
