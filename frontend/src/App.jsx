@@ -1,8 +1,70 @@
 import React, { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
+import { Video, CheckCircle2 } from 'lucide-react'
 import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+// Timeline Segment Component
+const TimelineSegment = ({ index }) => {
+  const segmentRef = useRef(null)
+  const [position, setPosition] = useState({
+    x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1920),
+    y: Math.random() * (typeof window !== 'undefined' ? window.innerHeight : 1080),
+    width: 80 + Math.random() * 200,
+    angle: Math.random() * 360,
+    speed: 0.3 + Math.random() * 0.5,
+    direction: Math.random() * 360
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    const moveSegment = () => {
+      setPosition(prev => {
+        const newX = prev.x + Math.cos(prev.direction * Math.PI / 180) * prev.speed
+        const newY = prev.y + Math.sin(prev.direction * Math.PI / 180) * prev.speed
+        
+        let finalX = newX
+        let finalY = newY
+        if (newX < -prev.width) finalX = window.innerWidth
+        if (newX > window.innerWidth) finalX = -prev.width
+        if (newY < -20) finalY = window.innerHeight
+        if (newY > window.innerHeight) finalY = -20
+        
+        return {
+          ...prev,
+          x: finalX,
+          y: finalY
+        }
+      })
+    }
+    
+    const interval = setInterval(moveSegment, 16)
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <div
+      ref={segmentRef}
+      className="timeline-segment"
+      style={{
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        width: `${position.width}px`,
+        transform: `rotate(${position.angle}deg)`,
+        animationDelay: `${index * 0.2}s`
+      }}
+    >
+      <div className="timeline-bar"></div>
+      <div className="timeline-chop-marks">
+        {Array.from({ length: Math.floor(position.width / 30) }, (_, i) => (
+          <div key={i} className="chop-mark" style={{ left: `${i * 30}px` }}></div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function App() {
   const [file, setFile] = useState(null)
@@ -388,7 +450,9 @@ function App() {
                     </>
                   ) : (
                     <div className="file-selected">
-                      <div className="file-icon">📹</div>
+                      <div className="file-icon">
+                        <Video size={48} strokeWidth={1.5} />
+                      </div>
                       <p className="file-name">{file.name}</p>
                       <p className="file-size">{formatFileSize(file.size)}</p>
                       {uploading && (
@@ -491,9 +555,11 @@ function App() {
         ) : (
           /* Completion Screen */
           <div className="completion-section">
-            <div className="completion-header">
-              <div className="completion-icon">✨</div>
-              <h2 className="completion-title">all done</h2>
+          <div className="completion-header">
+            <div className="completion-icon">
+              <CheckCircle2 size={64} strokeWidth={1.5} />
+            </div>
+            <h2 className="completion-title">all done</h2>
               <p className="completion-subtitle">{numSplits} pieces ready</p>
             </div>
 
