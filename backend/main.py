@@ -10,6 +10,7 @@ from pathlib import Path
 import ffmpeg
 from datetime import datetime
 from enum import Enum
+import threading
 
 app = FastAPI(title="V-Chopz API")
 
@@ -41,6 +42,7 @@ class JobStatus(str, Enum):
     FAILED = "failed"
 
 job_statuses: Dict[str, dict] = {}
+job_statuses_lock = threading.Lock()  # Thread-safe lock for status updates
 
 # Configuration
 MAX_FILE_SIZE = 50 * 1024 * 1024 * 1024  # 50GB for 24-hour videos
@@ -120,13 +122,14 @@ def split_video_with_watermark(
 ) -> list:
     """Split video into equal segments with watermark"""
     try:
-        # Update status
-        job_statuses[job_id] = {
-            "status": JobStatus.PROCESSING,
-            "progress": 0,
-            "total_segments": num_splits,
-            "message": "Starting video processing..."
-        }
+        # Update status (thread-safe)
+        with job_statuses_lock:
+            job_statuses[job_id] = {
+                "status": JobStatus.PROCESSING,
+                "progress": 0,
+                "total_segments": num_splits,
+                "message": "Starting video processing..."
+            }
         
         duration = get_video_duration(input_path)
         segment_duration = duration / num_splits
@@ -140,9 +143,11 @@ def split_video_with_watermark(
             start_time = i * segment_duration
             output_file = os.path.join(output_dir, f"segment_{i+1:02d}.mp4")
             
-            # Update progress
-            job_statuses[job_id]["progress"] = i + 1
-            job_statuses[job_id]["message"] = f"Processing segment {i+1} of {num_splits}..."
+            # Update progress (thread-safe)
+            with job_statuses_lock:
+                if job_id in job_statuses:
+                    job_statuses[job_id]["progress"] = i + 1
+                    job_statuses[job_id]["message"] = f"Processing segment {i+1} of {num_splits}..."
             
             # Build ffmpeg command
             input_stream = ffmpeg.input(input_path, ss=start_time, t=segment_duration)
@@ -174,22 +179,25 @@ def split_video_with_watermark(
             ffmpeg.run(output, overwrite_output=True, quiet=True)
             output_files.append(output_file)
         
-        # Mark as completed
-        job_statuses[job_id] = {
-            "status": JobStatus.COMPLETED,
-            "progress": num_splits,
-            "total_segments": num_splits,
-            "message": "Video split successfully",
-            "output_files": [os.path.basename(f) for f in output_files]
-        }
+        # Mark as completed (thread-safe)
+        with job_statuses_lock:
+            job_statuses[job_id] = {
+                "status": JobStatus.COMPLETED,
+                "progress": num_splits,
+                "total_segments": num_splits,
+                "message": "Video split successfully",
+                "output_files": [os.path.basename(f) for f in output_files]
+            }
         
         return output_files
     except Exception as e:
-        # Mark as failed
-        job_statuses[job_id] = {
-            "status": JobStatus.FAILED,
-            "message": f"Error: {str(e)}"
-        }
+        # Mark as failed (thread-safe)
+        with job_statuses_lock:
+            job_statuses[job_id] = {
+                "status": JobStatus.FAILED,
+                "message": f"Error: {str(e)}"
+            }
+        print(f"Error in split_video_with_watermark for {job_id}: {str(e)}")
         raise
 
 
@@ -303,25 +311,26 @@ async def split_video(
     }
     
     # Start background task for splitting using thread pool
-    async def process_video_async():
-        loop = asyncio.get_event_loop()
+    def run_split_task():
         try:
-            await loop.run_in_executor(
-                None,
-                split_video_with_watermark,
+            split_video_with_watermark(
                 str(input_video),
                 str(output_dir),
                 num_splits,
                 job_id
             )
         except Exception as e:
-            job_statuses[job_id] = {
-                "status": JobStatus.FAILED,
-                "message": f"Error: {str(e)}"
-            }
+            with job_statuses_lock:
+                job_statuses[job_id] = {
+                    "status": JobStatus.FAILED,
+                    "message": f"Error: {str(e)}"
+                }
+            print(f"Error processing video {job_id}: {str(e)}")
     
-    # Use asyncio.create_task to run in background
-    asyncio.create_task(process_video_async())
+    # Run in background thread
+    import threading
+    thread = threading.Thread(target=run_split_task, daemon=True)
+    thread.start()
     
     return {
         "job_id": job_id,
@@ -334,10 +343,12 @@ async def split_video(
 @app.get("/status/{job_id}")
 async def get_job_status(job_id: str):
     """Get the status of a video splitting job"""
-    if job_id not in job_statuses:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    status = job_statuses[job_id]
+    with job_statuses_lock:
+        if job_id not in job_statuses:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        # Create a copy to avoid race conditions
+        status = job_statuses[job_id].copy()
     
     # Calculate progress percentage if processing
     progress_percent = 0
