@@ -396,20 +396,11 @@ function App() {
           className="gradient-orb"
         ></div>
         
-        {/* Background artifacts with instructions */}
-        <div className="background-artifacts">
-          <div className="artifact artifact-1">click & hold</div>
-          <div className="artifact artifact-2">upload video</div>
-          <div className="artifact artifact-3">choose segments</div>
-          <div className="artifact artifact-4">chop it</div>
-          <div className="artifact artifact-5">download</div>
-          <div className="artifact artifact-6">up to 24hrs</div>
-          <div className="artifact artifact-7">free</div>
-          <div className="artifact artifact-8">watermarked</div>
-          <div className="artifact artifact-9">ready</div>
-          <div className="artifact artifact-10">hold</div>
-          <div className="artifact artifact-11">release</div>
-          <div className="artifact artifact-12">split</div>
+        {/* Animated video timeline segments */}
+        <div className="timeline-container">
+          {Array.from({ length: 15 }, (_, i) => (
+            <TimelineSegment key={i} index={i} mousePos={mousePos} />
+          ))}
         </div>
       </div>
 
